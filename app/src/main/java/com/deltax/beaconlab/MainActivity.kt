@@ -1,5 +1,4 @@
 package com.deltax.beaconlab
-
 import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothManager
@@ -8,84 +7,20 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.*
 import android.widget.*
-
-class MainActivity : Activity() {
-    private var advertiser: BluetoothLeAdvertiser? = null
-    private var callback: AdvertiseCallback? = null
-    private var advertising = false
-    private var startedAt = 0L
-    private lateinit var status: TextView
-    private lateinit var message: EditText
-    private lateinit var start: Button
-    private val handler = Handler(Looper.getMainLooper())
-
-    private val ticker = object : Runnable {
-        override fun run() {
-            if (advertising) {
-                val s = (SystemClock.elapsedRealtime() - startedAt) / 1000
-                status.text = "EMITIENDO BLE ✓\nTiempo: ${s}s\nUUID: 0xFE2C\nModel ID: 000000\nMensaje local: ${message.text}"
-                handler.postDelayed(this, 1000)
-            }
-        }
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        val layout=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(48,70,48,48)}
-        status=TextView(this).apply{text="DeltaX Beacon Lab\nListo para emitir";textSize=20f}
-        message=EditText(this).apply{hint="Mensaje";setText("Conoce DeltaX")}
-        start=Button(this).apply{text="INICIAR EMISIÓN"}
-        val change=Button(this).apply{text="CAMBIAR MENSAJE / REINICIAR"}
-        val stop=Button(this).apply{text="DETENER"}
-        layout.addView(status);layout.addView(message);layout.addView(start);layout.addView(change);layout.addView(stop);setContentView(layout)
-        if(Build.VERSION.SDK_INT>=31 && (!has(Manifest.permission.BLUETOOTH_ADVERTISE)||!has(Manifest.permission.BLUETOOTH_CONNECT)))
-            requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE,Manifest.permission.BLUETOOTH_CONNECT),7)
-        start.setOnClickListener { begin() }
-        change.setOnClickListener { end("Actualizando…"); begin() }
-        stop.setOnClickListener { end("Emisión detenida") }
-    }
-
-    private fun has(p:String)=Build.VERSION.SDK_INT<31 || checkSelfPermission(p)==PackageManager.PERMISSION_GRANTED
-
-    private fun begin(){
-        if(advertising){return}
-        if(!has(Manifest.permission.BLUETOOTH_CONNECT)||!has(Manifest.permission.BLUETOOTH_ADVERTISE)){status.text="Autoriza Bluetooth y vuelve a pulsar INICIAR";return}
-        try{
-            val bm=getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-            advertiser=bm.adapter.bluetoothLeAdvertiser
-            if(advertiser==null){status.text="Este teléfono no permite BLE advertising";return}
-            val uuid=ParcelUuid.fromString("0000FE2C-0000-1000-8000-00805F9B34FB")
-            // Fast Pair service data: 3-byte laboratory Model ID.
-            // The editable text is displayed locally for diagnostics; Fast Pair notification text
-            // is controlled by Google's registered Model ID metadata, not arbitrary BLE text.
-            val data=AdvertiseData.Builder().addServiceUuid(uuid).addServiceData(uuid,byteArrayOf(0,0,0)).setIncludeDeviceName(false).build()
-            val settings=AdvertiseSettings.Builder().setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY).setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH).setConnectable(true).build()
-            callback=object:AdvertiseCallback(){
-                override fun onStartSuccess(x:AdvertiseSettings?){
-                    advertising=true;start.isEnabled=false;message.isEnabled=true
-                    startedAt=SystemClock.elapsedRealtime()
-                    handler.removeCallbacks(ticker);handler.post(ticker)
-                }
-                override fun onStartFailure(e:Int){
-                    advertising=false;start.isEnabled=true;handler.removeCallbacks(ticker);callback=null
-                    status.text=when(e){
-                        ADVERTISE_FAILED_TOO_MANY_ADVERTISERS->"BLE ocupado. Apaga y enciende Bluetooth y pulsa INICIAR."
-                        ADVERTISE_FAILED_DATA_TOO_LARGE->"Error BLE: datos demasiado grandes"
-                        ADVERTISE_FAILED_FEATURE_UNSUPPORTED->"Error BLE: advertising no soportado"
-                        ADVERTISE_FAILED_INTERNAL_ERROR->"Error BLE interno"
-                        ADVERTISE_FAILED_ALREADY_STARTED->"La emisión BLE ya está activa"
-                        else->"Error BLE: $e"
-                    }
-                }
-            }
-            advertiser?.startAdvertising(settings,data,callback)
-        }catch(e:Exception){advertising=false;start.isEnabled=true;status.text="Error: "+e.message}
-    }
-
-    private fun end(msg:String){
-        handler.removeCallbacks(ticker)
-        if(has(Manifest.permission.BLUETOOTH_ADVERTISE)) callback?.let{try{advertiser?.stopAdvertising(it)}catch(_:Exception){}}
-        callback=null;advertising=false;start.isEnabled=true;status.text=msg
-    }
-    override fun onDestroy(){end("Emisión detenida");super.onDestroy()}
+import java.util.Locale
+class MainActivity:Activity(){
+ var advertiser:BluetoothLeAdvertiser?=null; var ac:AdvertiseCallback?=null; var scanner:BluetoothLeScanner?=null; var scanning=false
+ lateinit var status:TextView; lateinit var log:TextView
+ val uuid=ParcelUuid.fromString("0000FE2C-0000-1000-8000-00805F9B34FB")
+ override fun onCreate(b:Bundle?){super.onCreate(b);val l=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(42,60,42,42)}
+ status=TextView(this).apply{text="DeltaX Beacon Lab\nDiagnóstico BLE";textSize=20f};val e=Button(this).apply{text="EMITIR BEACON"};val x=Button(this).apply{text="DETENER EMISIÓN"};val s=Button(this).apply{text="DETECTAR BEACON"};val q=Button(this).apply{text="DETENER DETECCIÓN"};log=TextView(this).apply{text="Sin detecciones";textSize=16f};listOf(status,e,x,s,q,log).forEach{l.addView(it)};setContentView(l);permissions();e.setOnClickListener{emit()};x.setOnClickListener{stopEmit()};s.setOnClickListener{scan()};q.setOnClickListener{stopScan()}}
+ fun ok(p:String)=Build.VERSION.SDK_INT<31||checkSelfPermission(p)==PackageManager.PERMISSION_GRANTED
+ fun permissions(){if(Build.VERSION.SDK_INT>=31)requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE,Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN),10)}
+ fun emit(){if(!ok(Manifest.permission.BLUETOOTH_ADVERTISE)){permissions();return};val bm=getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager;advertiser=bm.adapter.bluetoothLeAdvertiser;val d=AdvertiseData.Builder().addServiceUuid(uuid).addServiceData(uuid,byteArrayOf(0,0,0)).build();val s=AdvertiseSettings.Builder().setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY).setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH).setConnectable(true).build();ac=object:AdvertiseCallback(){override fun onStartSuccess(x:AdvertiseSettings?){status.text="EMITIENDO ✓\nUUID 0xFE2C\nModel ID 000000"};override fun onStartFailure(e:Int){status.text="ERROR EMISIÓN BLE: $e"}};advertiser?.startAdvertising(s,d,ac)}
+ fun stopEmit(){ac?.let{advertiser?.stopAdvertising(it)};ac=null;status.text="Emisión detenida"}
+ val sc=object:ScanCallback(){override fun onScanResult(t:Int,r:ScanResult){show(r)};override fun onScanFailed(e:Int){log.text="ERROR ESCÁNER: $e"}}
+ fun show(r:ScanResult){val d=r.scanRecord?.getServiceData(uuid)?:return;val m=d.take(3).joinToString(""){String.format(Locale.US,"%02X",it.toInt() and 255)};val z=when{r.rssi>=-55->"muy cerca";r.rssi>=-70->"cerca";r.rssi>=-85->"media";else->"lejos"};runOnUiThread{log.text="BEACON DETECTADO ✓\nRSSI: ${r.rssi} dBm ($z)\nUUID: 0xFE2C\nModel ID: $m\nHora: ${java.text.SimpleDateFormat("HH:mm:ss",Locale.getDefault()).format(java.util.Date())}"}}
+ fun scan(){if(!ok(Manifest.permission.BLUETOOTH_SCAN)){permissions();log.text="Autoriza Bluetooth y pulsa DETECTAR nuevamente";return};val bm=getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager;scanner=bm.adapter.bluetoothLeScanner;val f=ScanFilter.Builder().setServiceUuid(uuid).build();val s=ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build();scanner?.startScan(listOf(f),s,sc);scanning=true;log.text="BUSCANDO beacon 0xFE2C…"}
+ fun stopScan(){if(scanning&&ok(Manifest.permission.BLUETOOTH_SCAN))scanner?.stopScan(sc);scanning=false}
+ override fun onDestroy(){stopScan();stopEmit();super.onDestroy()}
 }
