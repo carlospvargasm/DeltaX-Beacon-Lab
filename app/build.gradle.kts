@@ -4,11 +4,11 @@ android {
     namespace = "com.deltax.beaconlab"
     compileSdk = 35
     defaultConfig {
-        applicationId = "com.deltax.beaconlab.receiver2026"
+        applicationId = "com.deltax.quickshare.cvm20260920"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3"
+        versionCode = 4
+        versionName = "1.0-quickshare"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
