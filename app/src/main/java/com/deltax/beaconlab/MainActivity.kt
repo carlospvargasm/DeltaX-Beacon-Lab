@@ -45,7 +45,7 @@ class MainActivity : Activity() {
             val data=AdvertiseData.Builder().addServiceUuid(uuid).addServiceData(uuid,byteArrayOf(0,0,0)).setIncludeDeviceName(false).build()
             val settings=AdvertiseSettings.Builder().setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY).setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH).setConnectable(true).build()
             callback=object:AdvertiseCallback(){
-                override fun onStartSuccess(x:AdvertiseSettingsInEffect?){
+                override fun onStartSuccess(x:AdvertiseSettings?){
                     advertising=true;start.isEnabled=false
                     status.text="EMITIENDO\nFast Pair UUID: 0xFE2C\nModel ID laboratorio: 000000"
                 }
